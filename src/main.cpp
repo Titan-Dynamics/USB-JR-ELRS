@@ -228,8 +228,8 @@ void setup() {
 }
 
 void loop() {
-  //pumpHostParser();
-  //pumpCRSF();
+  pumpHostParser();
+  pumpCRSF();
 
   uint32_t now = millis();
   if (now - lastHostMs > 1000 && now - lastSweepMs > 50) {

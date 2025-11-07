@@ -1,0 +1,135 @@
+{
+  "serial_port": "COM3",
+  "serial_baud": 115200,
+  "joystick_index": 0,
+  "channels": [
+    {
+      "src": "axis",
+      "idx": 0,
+      "inv": false,
+      "min": 200,
+      "center": 1024,
+      "max": 1847
+    },
+    {
+      "src": "axis",
+      "idx": 1,
+      "inv": false,
+      "min": 200,
+      "center": 1024,
+      "max": 1847
+    },
+    {
+      "src": "axis",
+      "idx": 2,
+      "inv": false,
+      "min": 200,
+      "center": 1024,
+      "max": 1847
+    },
+    {
+      "src": "axis",
+      "idx": 3,
+      "inv": false,
+      "min": 200,
+      "center": 1024,
+      "max": 1847
+    },
+    {
+      "src": "const",
+      "idx": 0,
+      "inv": false,
+      "min": 0,
+      "center": 0,
+      "max": 2047
+    },
+    {
+      "src": "const",
+      "idx": 0,
+      "inv": false,
+      "min": 0,
+      "center": 0,
+      "max": 2047
+    },
+    {
+      "src": "const",
+      "idx": 0,
+      "inv": false,
+      "min": 0,
+      "center": 0,
+      "max": 2047
+    },
+    {
+      "src": "const",
+      "idx": 0,
+      "inv": false,
+      "min": 0,
+      "center": 0,
+      "max": 2047
+    },
+    {
+      "src": "const",
+      "idx": 0,
+      "inv": false,
+      "min": 0,
+      "center": 0,
+      "max": 2047
+    },
+    {
+      "src": "const",
+      "idx": 0,
+      "inv": false,
+      "min": 0,
+      "center": 0,
+      "max": 2047
+    },
+    {
+      "src": "const",
+      "idx": 0,
+      "inv": false,
+      "min": 0,
+      "center": 0,
+      "max": 2047
+    },
+    {
+      "src": "const",
+      "idx": 0,
+      "inv": false,
+      "min": 0,
+      "center": 0,
+      "max": 2047
+    },
+    {
+      "src": "const",
+      "idx": 0,
+      "inv": false,
+      "min": 0,
+      "center": 0,
+      "max": 2047
+    },
+    {
+      "src": "const",
+      "idx": 0,
+      "inv": false,
+      "min": 0,
+      "center": 0,
+      "max": 2047
+    },
+    {
+      "src": "const",
+      "idx": 0,
+      "inv": false,
+      "min": 0,
+      "center": 0,
+      "max": 2047
+    },
+    {
+      "src": "const",
+      "idx": 0,
+      "inv": false,
+      "min": 0,
+      "center": 0,
+      "max": 2047
+    }
+  ]
+}

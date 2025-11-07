@@ -3,9 +3,7 @@
 # pip install pyqt5 pygame pyserial
 
 import sys, json, time, struct, threading
-from collections import deque
-
-from PyQt5 import QtWidgets, QtCore, QtGui
+from PyQt5 import QtWidgets, QtCore
 import pygame
 import serial
 
@@ -26,10 +24,7 @@ def crc8_d5(data: bytes) -> int:
     for b in data:
         crc ^= b
         for _ in range(8):
-            if crc & 0x80:
-                crc = ((crc << 1) ^ 0xD5) & 0xFF
-            else:
-                crc = (crc << 1) & 0xFF
+            crc = ((crc << 1) ^ 0xD5) & 0xFF if crc & 0x80 else (crc << 1) & 0xFF
     return crc
 
 def build_frame(ftype: int, payload: bytes) -> bytes:
@@ -39,26 +34,26 @@ def build_frame(ftype: int, payload: bytes) -> bytes:
     crc = crc8_d5(body)
     return hdr + body + bytes([crc])
 
-# ---- Config model ----
+# ---- Config ----
 DEFAULT_CFG = {
     "serial_port": DEFAULT_PORT,
     "serial_baud": DEFAULT_BAUD,
-    "joystick_index": 0,
-    # per-channel config: source, axis index, invert, min/center/max (0..2047)
     "channels": [
-        {"src":"axis","idx":0,"inv":False,"min":200,"center":1024,"max":1847}, # ch1 A
-        {"src":"axis","idx":1,"inv":False,"min":200,"center":1024,"max":1847}, # ch2 E
-        {"src":"axis","idx":2,"inv":False,"min":200,"center":1024,"max":1847}, # ch3 T
-        {"src":"axis","idx":3,"inv":False,"min":200,"center":1024,"max":1847}, # ch4 R
-    ] + [{"src":"const","idx":0,"inv":False,"min":0,"center":0,"max":2047} for _ in range(12)]
+        {"src": "axis", "idx": 0, "inv": False, "min": 200, "center": 1024, "max": 1847},  # A
+        {"src": "axis", "idx": 1, "inv": False, "min": 200, "center": 1024, "max": 1847},  # E
+        {"src": "axis", "idx": 2, "inv": False, "min": 200, "center": 1024, "max": 1847},  # T
+        {"src": "axis", "idx": 3, "inv": False, "min": 200, "center": 1024, "max": 1847},  # R
+    ] + [{"src": "const", "idx": 0, "inv": False, "min": 0, "center": 0, "max": 2047} for _ in range(12)]
 }
 
-SRC_CHOICES = ["axis","button","const"]
+SRC_CHOICES = ["axis", "button", "const"]
+
+# -------------------------------------------------------------------
 
 class SerialThread(QtCore.QObject):
     telemetry = QtCore.pyqtSignal(dict)
-    debug     = QtCore.pyqtSignal(str)
-    raw_tel   = QtCore.pyqtSignal(int)  # count
+    debug = QtCore.pyqtSignal(str)
+    raw_tel = QtCore.pyqtSignal(int)
 
     def __init__(self, port, baud):
         super().__init__()
@@ -68,15 +63,15 @@ class SerialThread(QtCore.QObject):
 
     def close(self):
         self.running = False
-        try: self.ser.close()
-        except: pass
+        try:
+            self.ser.close()
+        except:
+            pass
 
     def send_channels(self, ch16):
-        # ch16: list of 16 ints (0..2047)
         payload = bytearray()
         for v in ch16:
-            if v<0: v=0
-            if v>2047: v=2047
+            v = max(0, min(2047, v))
             payload += struct.pack("<H", v)
         pkt = build_frame(TYPE_CHANNELS, bytes(payload))
         try:
@@ -85,29 +80,29 @@ class SerialThread(QtCore.QObject):
             self.debug.emit(f"Serial write error: {e}")
 
     def run(self):
-        # simple framed reader
         buf = bytearray()
         while self.running:
             try:
                 data = self.ser.read(256)
                 if data:
                     buf.extend(data)
-                    # parse frames
                     while True:
-                        # find header
                         p = buf.find(bytes([HEADER0, HEADER1]))
-                        if p < 0 or len(buf) < p+5:  # need hdr+len+type at least
-                            # trim noise
-                            if p > 0: del buf[:p]
+                        if p < 0 or len(buf) < p + 5:
+                            if p > 0:
+                                del buf[:p]
                             break
-                        if p > 0: del buf[:p]
-                        if len(buf) < 5: break
-                        length = buf[2] | (buf[3]<<8)
+                        if p > 0:
+                            del buf[:p]
+                        if len(buf) < 5:
+                            break
+                        length = buf[2] | (buf[3] << 8)
                         total = 4 + length + 1
-                        if len(buf) < total: break
+                        if len(buf) < total:
+                            break
                         ftype = buf[4]
-                        payload = bytes(buf[5: 4+length])
-                        crc = buf[4+length]
+                        payload = bytes(buf[5 : 4 + length])
+                        crc = buf[4 + length]
                         if crc8_d5(bytes([ftype]) + payload) == crc:
                             self._handle_frame(ftype, payload)
                         del buf[:total]
@@ -118,72 +113,106 @@ class SerialThread(QtCore.QObject):
                 time.sleep(0.2)
 
     def _handle_frame(self, t, payload):
-        if t == TYPE_TEL:
-            if len(payload) >= 10:
-                r = {
-                    "1RSS":  int(struct.unpack("b", payload[0:1])[0]),
-                    "2RSS":  int(struct.unpack("b", payload[1:2])[0]),
-                    "LQ":    payload[2],
-                    "RSNR":  int(struct.unpack("b", payload[3:4])[0]),
-                    "RFMD":  payload[4],
-                    "TPWR":  payload[5],
-                    "TRSS":  int(struct.unpack("b", payload[6:7])[0]),
-                    "TLQ":   payload[7],
-                    "TSNR":  int(struct.unpack("b", payload[8:9])[0]),
-                    "FLAGS": payload[9]
-                }
-                self.telemetry.emit(r)
+        if t == TYPE_TEL and len(payload) >= 10:
+            r = {
+                "1RSS": int(struct.unpack("b", payload[0:1])[0]),
+                "2RSS": int(struct.unpack("b", payload[1:2])[0]),
+                "LQ": payload[2],
+                "RSNR": int(struct.unpack("b", payload[3:4])[0]),
+                "RFMD": payload[4],
+                "TPWR": payload[5],
+                "TRSS": int(struct.unpack("b", payload[6:7])[0]),
+                "TLQ": payload[7],
+                "TSNR": int(struct.unpack("b", payload[8:9])[0]),
+                "FLAGS": payload[9],
+            }
+            self.telemetry.emit(r)
         elif t == TYPE_DEBUG:
             try:
-                self.debug.emit(payload.decode(errors='ignore'))
+                self.debug.emit(payload.decode(errors="ignore"))
             except:
                 pass
         elif t == TYPE_TEL_RAW:
             self.raw_tel_count += 1
             self.raw_tel.emit(self.raw_tel_count)
 
-class Joy:
-    def __init__(self, idx=None):
+# -------------------------------------------------------------------
+class Joy(QtCore.QObject):
+    status = QtCore.pyqtSignal(str)
+
+    def __init__(self):
+        super().__init__()
         pygame.init()
         pygame.joystick.init()
-
         self.j = None
         self.name = "None"
-        count = pygame.joystick.get_count()
 
+        # periodic scanner
+        self.timer = QtCore.QTimer()
+        self.timer.timeout.connect(self._scan)
+        self.timer.start(2000)
+
+        self.status.emit("Scanning for joystick...")
+
+    def _scan(self):
+        # Only scan if no joystick is currently active
+        if self.j is not None:
+            # Check that it still exists
+            count = pygame.joystick.get_count()
+            try:
+                # Safely access name to confirm it hasn't gone invalid
+                _ = self.j.get_name()
+            except pygame.error:
+                # joystick object became invalid
+                self.status.emit(f"Joystick '{self.name}' disconnected. Scanning...")
+                self.j = None
+                self.name = "None"
+                pygame.joystick.quit()
+                pygame.joystick.init()
+            return
+
+        # If we get here, there is no active joystick — scan for one
+        pygame.joystick.quit()
+        pygame.joystick.init()
+        count = pygame.joystick.get_count()
         if count == 0:
-            print("[WARN] No joysticks detected.")
+            self.status.emit("Scanning for joystick...")
         else:
-            # If user provided an index, use it if valid; otherwise auto-select first
-            if idx is not None and idx < count:
-                self.j = pygame.joystick.Joystick(idx)
-            else:
+            try:
                 self.j = pygame.joystick.Joystick(0)
-            self.j.init()
-            self.name = self.j.get_name()
-            print(f"[INFO] Joystick connected: {self.name}")
+                self.j.init()
+                self.name = self.j.get_name()
+                self.status.emit(f"Joystick connected: {self.name}")
+            except Exception as e:
+                self.status.emit(f"Joystick init error: {e}")
+                self.j = None
+                self.name = "None"
 
     def read(self):
         pygame.event.pump()
         axes, btns = [], []
         if self.j:
-            for i in range(self.j.get_numaxes()):
-                axes.append(self.j.get_axis(i))
-            for i in range(self.j.get_numbuttons()):
-                btns.append(1 if self.j.get_button(i) else 0)
+            try:
+                for i in range(self.j.get_numaxes()):
+                    axes.append(self.j.get_axis(i))
+                for i in range(self.j.get_numbuttons()):
+                    btns.append(1 if self.j.get_button(i) else 0)
+            except pygame.error:
+                # Lost joystick during read
+                self.status.emit(f"Joystick '{self.name}' lost. Scanning...")
+                self.j = None
+                self.name = "None"
         return axes, btns
 
+# -------------------------------------------------------------------
 
 def map_axis_to_0_2047(val, inv, mn, ct, mx):
-    # val in [-1..1] -> [0..2047] using min/center/max
-    if inv: val = -val
-    # piecewise mapping around center
+    if inv:
+        val = -val
     if val >= 0:
-        hi = mx
-        return int(ct + val*(hi-ct))
+        return int(ct + val * (mx - ct))
     else:
-        lo = mn
-        return int(ct + val*(ct-lo))
+        return int(ct + val * (ct - mn))
 
 class ChannelRow(QtWidgets.QWidget):
     changed = QtCore.pyqtSignal()
@@ -191,14 +220,10 @@ class ChannelRow(QtWidgets.QWidget):
     def __init__(self, idx, cfg):
         super().__init__()
         self.idx = idx
-        self.cfg = cfg
-
         layout = QtWidgets.QGridLayout(self)
         name = f"CH{idx+1}"
-        if idx==0: name += " (A)"
-        if idx==1: name += " (E)"
-        if idx==2: name += " (T)"
-        if idx==3: name += " (R)"
+        if idx < 4:
+            name += f" ({'AETR'[idx]})"
 
         self.lbl = QtWidgets.QLabel(name)
         self.bar = QtWidgets.QProgressBar(); self.bar.setRange(0,2047)
@@ -232,11 +257,9 @@ class ChannelRow(QtWidgets.QWidget):
 
         for w in [self.src,self.idxBox,self.inv,self.minBox,self.midBox,self.maxBox]:
             if isinstance(w, QtWidgets.QAbstractButton):
-                w.toggled.connect(self._emit)
+                w.toggled.connect(self.changed.emit)
             else:
-                w.currentIndexChanged.connect(self._emit) if isinstance(w, QtWidgets.QComboBox) else w.valueChanged.connect(self._emit)
-
-    def _emit(self,*a): self.changed.emit()
+                w.currentIndexChanged.connect(self.changed.emit) if isinstance(w, QtWidgets.QComboBox) else w.valueChanged.connect(self.changed.emit)
 
     def compute(self, axes, btns):
         src = self.src.currentText()
@@ -245,14 +268,13 @@ class ChannelRow(QtWidgets.QWidget):
         mn  = self.minBox.value()
         ct  = self.midBox.value()
         mx  = self.maxBox.value()
-
-        if src=="axis":
+        if src == "axis":
             v = axes[idx] if idx < len(axes) else 0.0
             out = map_axis_to_0_2047(v, inv, mn, ct, mx)
-        elif src=="button":
+        elif src == "button":
             v = btns[idx] if idx < len(btns) else 0
             out = mx if (v ^ inv) else mn
-        else: # const
+        else:
             out = ct
         self.bar.setValue(out)
         self.val.setText(str(out))
@@ -265,45 +287,34 @@ class ChannelRow(QtWidgets.QWidget):
             "inv": self.inv.isChecked(),
             "min": self.minBox.value(),
             "center": self.midBox.value(),
-            "max": self.maxBox.value()
+            "max": self.maxBox.value(),
         }
+
+# -------------------------------------------------------------------
 
 class Main(QtWidgets.QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("ELRS Calibrator + Link Stats")
         self.resize(1100, 700)
-
         self.cfg = DEFAULT_CFG.copy()
         self._load_cfg()
 
-        # Serial
+        layout = QtWidgets.QVBoxLayout(self)
+
+        # Serial thread
         self.serThread = SerialThread(self.cfg["serial_port"], self.cfg["serial_baud"])
-        self.thread = threading.Thread(target=self.serThread.run, daemon=True); self.thread.start()
+        self.thread = threading.Thread(target=self.serThread.run, daemon=True)
+        self.thread.start()
         self.serThread.telemetry.connect(self.onTel)
         self.serThread.debug.connect(self.onDebug)
         self.serThread.raw_tel.connect(self.onRawTel)
 
-        # Joystick
-        self.joy = Joy(self.cfg.get("joystick_index",0))
+        # Joystick (auto-scanning)
+        self.joy = Joy()
+        self.joy.status.connect(self.onDebug)
 
-        # UI
-        layout = QtWidgets.QVBoxLayout(self)
-
-        # Top bar: port, baud, joystick
-        top = QtWidgets.QHBoxLayout()
-        self.portEdit = QtWidgets.QLineEdit(self.cfg["serial_port"])
-        self.baudEdit = QtWidgets.QLineEdit(str(self.cfg["serial_baud"]))
-        self.joyIdx   = QtWidgets.QSpinBox(); self.joyIdx.setRange(0,8); self.joyIdx.setValue(self.cfg.get("joystick_index",0))
-        self.btnReconnect = QtWidgets.QPushButton("Reconnect")
-        self.btnReconnect.clicked.connect(self.reconnect)
-        top.addWidget(QtWidgets.QLabel("Port")); top.addWidget(self.portEdit)
-        top.addWidget(QtWidgets.QLabel("Baud")); top.addWidget(self.baudEdit)
-        top.addWidget(QtWidgets.QLabel("Joystick")); top.addWidget(self.joyIdx)
-        top.addWidget(self.btnReconnect)
-        layout.addLayout(top)
-
-        # Channels grid
+        # Channels
         self.rows = []
         grid = QtWidgets.QGridLayout()
         for i in range(CHANNELS):
@@ -313,7 +324,7 @@ class Main(QtWidgets.QWidget):
             grid.addWidget(row, i, 0)
         layout.addLayout(grid)
 
-        # Telemetry panel
+        # Telemetry
         tel = QtWidgets.QHBoxLayout()
         self.telLabels = {}
         for key in ["1RSS","2RSS","RSNR","TRSS","TSNR","LQ","TLQ","RFMD","TPWR"]:
@@ -328,35 +339,20 @@ class Main(QtWidgets.QWidget):
         tel.addWidget(self.rawCount)
         layout.addLayout(tel)
 
-        # Log / save
-        bottom = QtWidgets.QHBoxLayout()
+        # Log + Save
         self.log = QtWidgets.QPlainTextEdit(); self.log.setReadOnly(True)
         layout.addWidget(self.log)
-        self.btnSave = QtWidgets.QPushButton("Save Config"); self.btnSave.clicked.connect(self.save_cfg)
+        self.btnSave = QtWidgets.QPushButton("Save Config")
+        self.btnSave.clicked.connect(self.save_cfg)
         layout.addWidget(self.btnSave)
 
-        # Timer to sample joystick + send channels
-        self.timer = QtCore.QTimer(self); self.timer.timeout.connect(self.tick); self.timer.start(int(1000/SEND_HZ))
-
-    def reconnect(self):
-        try:
-            self.serThread.close()
-        except: pass
-        port = self.portEdit.text().strip()
-        baud = int(self.baudEdit.text().strip())
-        self.serThread = SerialThread(port, baud)
-        self.thread = threading.Thread(target=self.serThread.run, daemon=True); self.thread.start()
-        self.serThread.telemetry.connect(self.onTel)
-        self.serThread.debug.connect(self.onDebug)
-        self.serThread.raw_tel.connect(self.onRawTel)
-        self.cfg["serial_port"]=port; self.cfg["serial_baud"]=baud
-        self.joy = Joy(self.joyIdx.value())
-        self.cfg["joystick_index"]=self.joyIdx.value()
-        self._save_cfg_disk()
-        self.onDebug(f"Reconnected {port} @ {baud}, joystick {self.cfg['joystick_index']}")
+        # Timer loop
+        self.timer = QtCore.QTimer(self)
+        self.timer.timeout.connect(self.tick)
+        self.timer.start(int(1000 / SEND_HZ))
 
     def onTel(self, d):
-        for k,v in d.items():
+        for k, v in d.items():
             if k in self.telLabels:
                 self.telLabels[k].setText(str(v))
 
@@ -368,45 +364,44 @@ class Main(QtWidgets.QWidget):
 
     def tick(self):
         axes, btns = self.joy.read()
-        ch = []
-        for r in self.rows:
-            ch.append(r.compute(axes, btns))
+        ch = [r.compute(axes, btns) for r in self.rows]
         self.serThread.send_channels(ch)
 
     def save_cfg(self):
         self.cfg["channels"] = [r.to_cfg() for r in self.rows]
-        self.cfg["serial_port"] = self.portEdit.text().strip()
-        self.cfg["serial_baud"] = int(self.baudEdit.text().strip())
-        self.cfg["joystick_index"] = self.joyIdx.value()
         self._save_cfg_disk()
         self.onDebug("Config saved")
 
     def _save_cfg_disk(self):
         try:
-            with open("calib.json","w") as f: json.dump(self.cfg,f,indent=2)
+            with open("calib.json", "w") as f:
+                json.dump(self.cfg, f, indent=2)
         except Exception as e:
             self.onDebug(f"Save error: {e}")
 
     def _load_cfg(self):
         try:
-            with open("calib.json","r") as f:
+            with open("calib.json", "r") as f:
                 disk = json.load(f)
-            # merge
             self.cfg.update(disk)
-            # normalize channels length
-            chs = self.cfg.get("channels",[])
+            chs = self.cfg.get("channels", [])
             if len(chs) < CHANNELS:
-                chs += [DEFAULT_CFG["channels"][0]]*(CHANNELS-len(chs))
+                chs += [DEFAULT_CFG["channels"][0]] * (CHANNELS - len(chs))
             self.cfg["channels"] = chs[:CHANNELS]
         except:
             pass
 
     def closeEvent(self, e):
-        try: self.serThread.close()
-        except: pass
+        try:
+            self.serThread.close()
+        except:
+            pass
         e.accept()
+
+# -------------------------------------------------------------------
 
 if __name__ == "__main__":
     app = QtWidgets.QApplication(sys.argv)
-    w = Main(); w.show()
+    w = Main()
+    w.show()
     sys.exit(app.exec_())
