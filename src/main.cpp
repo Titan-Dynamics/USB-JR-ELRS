@@ -1,11 +1,18 @@
 #include <Arduino.h>
 #include "driver/uart.h"
+#include "driver/gpio.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "hal/uart_ll.h"
+#include "soc/gpio_sig_map.h"
 
 // ------- Pins & Baud ------
 #define CRSF_UART_NUM UART_NUM_1
-#define CRSF_TX_PIN   43   // ESP32 TX -> Module RX
-#define CRSF_RX_PIN   -1   // Should be half-duplex...
-#define CRSF_BAUD     1870000
+// 1-wire CRSF: TX and RX share same GPIO to ELRS module.
+#define CRSF_1WIRE_PIN 43
+#define CRSF_TX_PIN    CRSF_1WIRE_PIN
+#define CRSF_RX_PIN    CRSF_1WIRE_PIN
+#define CRSF_BAUD     400000
 
 #define HOST_BAUD     115200
 
@@ -72,6 +79,45 @@ void packCRSFChannels(const uint16_t ch[16], uint8_t out22[22]) {
   if (idx < 22) out22[idx++] = bitbuf & 0xFF;
 }
 
+// ---- Half-duplex helpers (GPIO matrix) ----
+#if CRSF_UART_NUM == UART_NUM_0
+#  define CRSF_RX_SIG_IDX U0RXD_IN_IDX
+#  define CRSF_TX_SIG_IDX U0TXD_OUT_IDX
+#elif CRSF_UART_NUM == UART_NUM_1
+#  define CRSF_RX_SIG_IDX U1RXD_IN_IDX
+#  define CRSF_TX_SIG_IDX U1TXD_OUT_IDX
+#else
+#  define CRSF_RX_SIG_IDX U2RXD_IN_IDX
+#  define CRSF_TX_SIG_IDX U2TXD_OUT_IDX
+#endif
+
+static const bool kHalfDuplex = (CRSF_TX_PIN == CRSF_RX_PIN);
+static bool kUartInverted = true; // CRSF is inverted on 1-wire
+
+static inline void duplex_set_RX() {
+  gpio_set_direction((gpio_num_t)CRSF_1WIRE_PIN, GPIO_MODE_INPUT);
+  gpio_matrix_in((gpio_num_t)CRSF_1WIRE_PIN, CRSF_RX_SIG_IDX, kUartInverted);
+  if (kUartInverted) { gpio_pulldown_en((gpio_num_t)CRSF_1WIRE_PIN); gpio_pullup_dis((gpio_num_t)CRSF_1WIRE_PIN); }
+  else { gpio_pullup_en((gpio_num_t)CRSF_1WIRE_PIN); gpio_pulldown_dis((gpio_num_t)CRSF_1WIRE_PIN); }
+}
+
+static inline void duplex_set_TX() {
+  gpio_set_pull_mode((gpio_num_t)CRSF_1WIRE_PIN, GPIO_FLOATING);
+  if (kUartInverted) {
+    gpio_set_level((gpio_num_t)CRSF_1WIRE_PIN, 0);
+    gpio_set_direction((gpio_num_t)CRSF_1WIRE_PIN, GPIO_MODE_OUTPUT);
+    constexpr uint8_t MATRIX_DETACH_IN_LOW = 0x30; // route constant 0 to detach RX
+    gpio_matrix_in(MATRIX_DETACH_IN_LOW, CRSF_RX_SIG_IDX, false);
+    gpio_matrix_out((gpio_num_t)CRSF_1WIRE_PIN, CRSF_TX_SIG_IDX, true, false);
+  } else {
+    gpio_set_level((gpio_num_t)CRSF_1WIRE_PIN, 1);
+    gpio_set_direction((gpio_num_t)CRSF_1WIRE_PIN, GPIO_MODE_OUTPUT);
+    constexpr uint8_t MATRIX_DETACH_IN_HIGH = 0x38; // route constant 1 to detach RX
+    gpio_matrix_in(MATRIX_DETACH_IN_HIGH, CRSF_RX_SIG_IDX, false);
+    gpio_matrix_out((gpio_num_t)CRSF_1WIRE_PIN, CRSF_TX_SIG_IDX, false, false);
+  }
+}
+
 void sendCRSFchannels(const uint16_t ch[16]) {
   uint8_t payload[22]; packCRSFChannels(ch, payload);
   uint8_t frame[1 + 1 + 1 + 22 + 1];
@@ -82,7 +128,10 @@ void sendCRSFchannels(const uint16_t ch[16]) {
   memcpy(&frame[idx], payload, 22); idx += 22;
   uint8_t crc = crc8_d5(&frame[2], 1 + 22); // over type+payload
   frame[idx++] = crc;
+  if (kHalfDuplex) duplex_set_TX();
   uart_write_bytes(CRSF_UART_NUM, (const char*)frame, idx);
+  uart_wait_tx_done(CRSF_UART_NUM, pdMS_TO_TICKS(2));
+  if (kHalfDuplex) { duplex_set_RX(); uart_flush_input(CRSF_UART_NUM); }
 }
 
 // ---- UART setup ----
@@ -96,8 +145,10 @@ void setupCRSFuart() {
   };
   uart_param_config(CRSF_UART_NUM, &cfg);
   uart_set_pin(CRSF_UART_NUM, CRSF_TX_PIN, CRSF_RX_PIN, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
-  uart_set_line_inverse(CRSF_UART_NUM, UART_SIGNAL_TXD_INV);
   uart_driver_install(CRSF_UART_NUM, 1024, 1024, 0, NULL, 0);
+  if (kHalfDuplex) {
+    duplex_set_RX();
+  }
 }
 
 // ----- CRSF telemetry parsing (best-effort for 0x14) -----
@@ -202,7 +253,7 @@ void pumpCRSF() {
     if (crc == crc8_d5(tmp, 1+paylen)) {
       if (type == CRSF_TYPE_LINK_STATISTICS) {
         parseCRSFLinkStats(payload, paylen);
-      } else {
+      } else if (type != CRSF_TYPE_RC_CHANNELS) { // ignore our own RC frame echo on 1-wire
         // forward raw
         sendRawTel(&buf[i], needed);
       }
