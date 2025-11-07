@@ -4,8 +4,8 @@
 // ------- Pins & Baud ------
 #define CRSF_UART_NUM UART_NUM_1
 #define CRSF_TX_PIN   43   // ESP32 TX -> Module RX
-#define CRSF_RX_PIN   -1   // ESP32 RX <- Module TX
-#define CRSF_BAUD     400000
+#define CRSF_RX_PIN   -1   // Should be half-duplex...
+#define CRSF_BAUD     1870000
 
 #define HOST_BAUD     115200
 
@@ -96,7 +96,6 @@ void setupCRSFuart() {
   };
   uart_param_config(CRSF_UART_NUM, &cfg);
   uart_set_pin(CRSF_UART_NUM, CRSF_TX_PIN, CRSF_RX_PIN, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
-  // Invert TX (common for CRSF TX to module). If your module expects non-inverted, comment this out.
   uart_set_line_inverse(CRSF_UART_NUM, UART_SIGNAL_TXD_INV);
   uart_driver_install(CRSF_UART_NUM, 1024, 1024, 0, NULL, 0);
 }
@@ -212,14 +211,6 @@ void pumpCRSF() {
   }
 }
 
-// ----- Debug sweep channels when no host data -----
-uint16_t sweepVal(int ch, uint32_t t) {
-  uint32_t period = 3000 + ch*180;
-  uint32_t phase = (t % period);
-  if (phase < period/2) return map(phase, 0, period/2, 200, 1800);
-  return map(phase-period/2, 0, period/2, 1800, 200);
-}
-
 void setup() {
   Serial.begin(HOST_BAUD);
   while(!Serial) { delay(10); }
@@ -233,7 +224,9 @@ void loop() {
 
   uint32_t now = millis();
   if (now - lastHostMs > 1000 && now - lastSweepMs > 50) {
-    uint16_t ch[16]; for (int i=0;i<16;i++) ch[i]=sweepVal(i, now);
+    uint16_t ch[16];
+    for (int i = 0; i < 16; i++) ch[i] = 1500; // default to 1500 on all
+    ch[4] = 1000; // CH5 (1-based) at 1000
     sendCRSFchannels(ch);
     lastSweepMs = now;
   }
