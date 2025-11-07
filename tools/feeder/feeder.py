@@ -314,7 +314,7 @@ class Main(QtWidgets.QWidget):
         self.joy = Joy()
         self.joy.status.connect(self.onDebug)
 
-        # Channels
+        # Channels (scrollable)
         self.rows = []
         grid = QtWidgets.QGridLayout()
         for i in range(CHANNELS):
@@ -322,7 +322,17 @@ class Main(QtWidgets.QWidget):
             row.changed.connect(self.save_cfg)
             self.rows.append(row)
             grid.addWidget(row, i, 0)
-        layout.addLayout(grid)
+
+        ch_container = QtWidgets.QWidget()
+        ch_container.setLayout(grid)
+
+        ch_scroll = QtWidgets.QScrollArea()
+        ch_scroll.setWidgetResizable(True)
+        ch_scroll.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
+        ch_scroll.setWidget(ch_container)
+        ch_scroll.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
+
+        layout.addWidget(ch_scroll)
 
         # Telemetry
         tel = QtWidgets.QHBoxLayout()
@@ -339,14 +349,20 @@ class Main(QtWidgets.QWidget):
         tel.addWidget(self.rawCount)
         layout.addLayout(tel)
 
-        # Log + Save
+        # Log + Save (fixed height)
         self.log = QtWidgets.QPlainTextEdit(); self.log.setReadOnly(True)
+        self.log.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
+        self.log.setFixedHeight(140)
         layout.addWidget(self.log)
         self.btnSave = QtWidgets.QPushButton("Save Config")
         self.btnSave.clicked.connect(self.save_cfg)
         layout.addWidget(self.btnSave)
 
         # Timer loop
+        # Only the channels area should expand/contract on resize
+        # ch_scroll is the first item added to the main layout
+        layout.setStretch(0, 1)
+
         self.timer = QtCore.QTimer(self)
         self.timer.timeout.connect(self.tick)
         self.timer.start(int(1000 / SEND_HZ))
