@@ -1,0 +1,8 @@
+# PlatformIO
+.pio/
+.vscode/
+.clangd/
+.cache/
+cmake-build*/
+.DS_Store
+
