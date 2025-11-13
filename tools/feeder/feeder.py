@@ -205,6 +205,8 @@ class Joy(QtCore.QObject):
         pygame.joystick.init()
         self.j = None
         self.name = "None"
+        # Pygame 2 provides joystick hotplug events; detect support.
+        self._joy_events_supported = hasattr(pygame, "JOYDEVICEADDED") and hasattr(pygame, "JOYDEVICEREMOVED")
 
         # periodic scanner
         self.timer = QtCore.QTimer()
@@ -212,6 +214,42 @@ class Joy(QtCore.QObject):
         self.timer.start(2000)
 
         self.status.emit("Scanning for joystick...")
+
+    def _handle_device_added(self, device_index: int):
+        """Handle a newly added joystick device (pygame 2+)."""
+        try:
+            # Ensure subsystem is initialized
+            if not pygame.joystick.get_init():
+                pygame.joystick.init()
+            # If we already have a joystick, ignore additional ones
+            if self.j is not None:
+                return
+            js = pygame.joystick.Joystick(device_index)
+            js.init()
+            self.j = js
+            try:
+                self.name = self.j.get_name()
+            except Exception:
+                self.name = "Joystick"
+            self.status.emit(f"Joystick connected: {self.name}")
+        except Exception as e:
+            self.status.emit(f"Joystick init error: {e}")
+            self.j = None
+            self.name = "None"
+
+    def _handle_device_removed(self, instance_id):
+        """Handle joystick removal (pygame 2+)."""
+        try:
+            current_id = self.j.get_instance_id() if (self.j is not None and hasattr(self.j, "get_instance_id")) else None
+        except Exception:
+            current_id = None
+        # If we don't know ids, or it matches our current one, drop it.
+        if self.j is None or current_id is None or instance_id == current_id:
+            self.status.emit(f"Joystick '{self.name}' disconnected. Scanning...")
+            self.j = None
+            self.name = "None"
+            # Kick an immediate scan to pick up any other available device
+            self._scan()
 
     def _scan(self):
         # Only scan if no joystick is currently active
@@ -248,7 +286,20 @@ class Joy(QtCore.QObject):
                 self.name = "None"
 
     def read(self):
-        pygame.event.pump()
+        # Prefer hotplug events if available for immediate reconnect
+        if self._joy_events_supported:
+            try:
+                for ev in pygame.event.get([pygame.JOYDEVICEADDED, pygame.JOYDEVICEREMOVED]):
+                    if ev.type == pygame.JOYDEVICEADDED:
+                        # ev.device_index is the index to open
+                        self._handle_device_added(getattr(ev, "device_index", 0))
+                    elif ev.type == pygame.JOYDEVICEREMOVED:
+                        self._handle_device_removed(getattr(ev, "instance_id", None))
+            except Exception:
+                # Fall back to simple pumping if anything goes wrong
+                pygame.event.pump()
+        else:
+            pygame.event.pump()
         axes, btns = [], []
         if self.j:
             try:
@@ -261,6 +312,8 @@ class Joy(QtCore.QObject):
                 self.status.emit(f"Joystick '{self.name}' lost. Scanning...")
                 self.j = None
                 self.name = "None"
+                # Trigger a quick rescan so we don't wait for the periodic timer
+                self._scan()
         return axes, btns
 
 # -------------------------------------------------------------------
