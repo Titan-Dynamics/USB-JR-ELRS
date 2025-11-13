@@ -63,6 +63,7 @@ class SerialThread(QtCore.QObject):
     telemetry = QtCore.pyqtSignal(dict)
     debug = QtCore.pyqtSignal(str)
     raw_tel = QtCore.pyqtSignal(int)
+    connection_status = QtCore.pyqtSignal(bool)  # True = connected, False = disconnected
 
     def __init__(self, port, baud):
         super().__init__()
@@ -71,7 +72,8 @@ class SerialThread(QtCore.QObject):
         self.ser = None
         self.running = True
         self.raw_tel_count = 0
-        self._connect()
+        self._last_status = False
+        # Don't connect here; let the Main class connect the signal first
 
     def _connect(self):
         """Attempt to connect to the serial port"""
@@ -83,9 +85,21 @@ class SerialThread(QtCore.QObject):
                     pass
             self.ser = serial.Serial(self.port, self.baud, timeout=0.05)
             self.debug.emit(f"Connected to {self.port} @ {self.baud} baud")
+            self._update_status()
         except Exception as e:
             self.debug.emit(f"Failed to connect to {self.port}: {e}")
             self.ser = None
+            self._update_status()
+
+    def _update_status(self):
+        """Emit connection status if it changed"""
+        is_connected = self.ser is not None
+        if is_connected != self._last_status:
+            self._last_status = is_connected
+            try:
+                self.connection_status.emit(is_connected)
+            except Exception as e:
+                print(f"Error emitting connection status: {e}")
 
     def reconnect(self, port, baud):
         """Reconnect with new port/baud settings"""
@@ -118,6 +132,8 @@ class SerialThread(QtCore.QObject):
         buf = bytearray()
         while self.running:
             if not self.ser:
+                self._update_status()
+                self._connect()  # Try to reconnect
                 time.sleep(0.5)
                 continue
             try:
@@ -149,6 +165,7 @@ class SerialThread(QtCore.QObject):
             except Exception as e:
                 self.debug.emit(f"Serial read error: {e}")
                 self.ser = None
+                self._update_status()
                 time.sleep(0.2)
 
     def _handle_frame(self, t, payload):
@@ -519,9 +536,12 @@ class Main(QtWidgets.QWidget):
         self.serThread.telemetry.connect(self.onTel)
         self.serThread.debug.connect(self.onDebug)
         self.serThread.raw_tel.connect(self.onRawTel)
+        self.serThread.connection_status.connect(self.onConnectionStatus)
 
         # Serial port selection controls
-        port_layout = QtWidgets.QHBoxLayout()
+        port_widget = QtWidgets.QWidget()
+        port_layout = QtWidgets.QHBoxLayout(port_widget)
+        port_layout.setContentsMargins(0, 5, 0, 5)
         port_layout.addWidget(QtWidgets.QLabel("COM Port:"))
 
         self.portCombo = QtWidgets.QComboBox()
@@ -545,7 +565,17 @@ class Main(QtWidgets.QWidget):
         port_layout.addWidget(self.baudCombo)
 
         port_layout.addStretch()
-        layout.addLayout(port_layout)
+
+        # Serial status indicator
+        self.statusIndicator = QtWidgets.QLabel("●")
+        self.statusIndicator.setStyleSheet("color: red; font-size: 16px;")
+        self.statusLabel = QtWidgets.QLabel("Disconnected")
+        self.statusLabel.setStyleSheet("color: red;")
+        port_layout.addWidget(self.statusIndicator)
+        port_layout.addWidget(self.statusLabel)
+
+        port_widget.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
+        layout.addWidget(port_widget)
 
         # Joystick (auto-scanning)
         self.joy = Joy()
@@ -611,6 +641,9 @@ class Main(QtWidgets.QWidget):
         self.timer.timeout.connect(self.tick)
         self.timer.start(int(1000 / SEND_HZ))
 
+        # Schedule initial connection attempt after GUI is shown
+        QtCore.QTimer.singleShot(500, lambda: self.serThread._connect())
+
     def onTel(self, d):
         for k, v in d.items():
             if k in self.telLabels:
@@ -618,6 +651,17 @@ class Main(QtWidgets.QWidget):
 
     def onRawTel(self, n):
         self.rawCount.setText(f"RAW: {n}")
+
+    def onConnectionStatus(self, is_connected):
+        """Update status indicator based on actual connection state"""
+        if is_connected:
+            self.statusIndicator.setStyleSheet("color: green; font-size: 16px;")
+            self.statusLabel.setText("Connected")
+            self.statusLabel.setStyleSheet("color: green;")
+        else:
+            self.statusIndicator.setStyleSheet("color: red; font-size: 16px;")
+            self.statusLabel.setText("Disconnected")
+            self.statusLabel.setStyleSheet("color: red;")
 
     def onDebug(self, s):
         self.log.appendPlainText(s)

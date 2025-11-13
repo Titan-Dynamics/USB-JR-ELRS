@@ -3,149 +3,196 @@
   "serial_baud": 115200,
   "channels": [
     {
+      "name": "Ail",
       "src": "axis",
       "idx": 2,
       "inv": false,
       "toggle": false,
-      "min": 200,
-      "center": 1024,
-      "max": 1845
+      "rotary": false,
+      "rotary_stops": 3,
+      "min": 1000,
+      "center": 1500,
+      "max": 2000
     },
     {
+      "name": "Elev",
       "src": "axis",
       "idx": 3,
       "inv": false,
       "toggle": false,
-      "min": 200,
-      "center": 1024,
-      "max": 1847
+      "rotary": false,
+      "rotary_stops": 3,
+      "min": 1000,
+      "center": 1500,
+      "max": 2000
     },
     {
+      "name": "Thr",
       "src": "axis",
       "idx": 1,
-      "inv": true,
+      "inv": false,
       "toggle": false,
-      "min": 200,
-      "center": 1024,
-      "max": 1847
+      "rotary": false,
+      "rotary_stops": 3,
+      "min": 1000,
+      "center": 1500,
+      "max": 2000
     },
     {
+      "name": "Rudd",
       "src": "axis",
       "idx": 0,
       "inv": false,
       "toggle": false,
-      "min": 200,
-      "center": 1024,
-      "max": 1847
+      "rotary": false,
+      "rotary_stops": 3,
+      "min": 1000,
+      "center": 1500,
+      "max": 2000
     },
     {
+      "name": "Arm",
       "src": "button",
       "idx": 0,
       "inv": false,
       "toggle": true,
-      "min": 0,
-      "center": 0,
-      "max": 2047
+      "rotary": false,
+      "rotary_stops": 3,
+      "min": 1000,
+      "center": 1500,
+      "max": 2000
     },
     {
+      "name": "Mode",
       "src": "button",
       "idx": 1,
       "inv": false,
       "toggle": false,
-      "min": 0,
-      "center": 0,
-      "max": 2047
+      "rotary": true,
+      "rotary_stops": 6,
+      "min": 1000,
+      "center": 1500,
+      "max": 2000
     },
     {
+      "name": "",
       "src": "button",
       "idx": 2,
       "inv": false,
-      "toggle": false,
-      "min": 0,
-      "center": 0,
-      "max": 2047
+      "toggle": true,
+      "rotary": false,
+      "rotary_stops": 3,
+      "min": 1000,
+      "center": 1500,
+      "max": 2000
     },
     {
+      "name": "",
       "src": "button",
-      "idx": 4,
+      "idx": 3,
       "inv": false,
-      "toggle": false,
-      "min": 0,
-      "center": 0,
-      "max": 2047
+      "toggle": true,
+      "rotary": false,
+      "rotary_stops": 3,
+      "min": 1000,
+      "center": 1500,
+      "max": 2000
     },
     {
-      "src": "button",
-      "idx": 5,
-      "inv": false,
-      "toggle": false,
-      "min": 0,
-      "center": 0,
-      "max": 2047
-    },
-    {
-      "src": "axis",
-      "idx": 5,
-      "inv": false,
-      "toggle": false,
-      "min": 0,
-      "center": 0,
-      "max": 2047
-    },
-    {
-      "src": "axis",
-      "idx": 4,
-      "inv": false,
-      "toggle": false,
-      "min": 0,
-      "center": 0,
-      "max": 2047
-    },
-    {
+      "name": "",
       "src": "const",
       "idx": 0,
       "inv": false,
       "toggle": false,
-      "min": 0,
-      "center": 0,
-      "max": 2047
+      "rotary": false,
+      "rotary_stops": 3,
+      "min": 1000,
+      "center": 1500,
+      "max": 2000
     },
     {
+      "name": "",
       "src": "const",
       "idx": 0,
       "inv": false,
       "toggle": false,
-      "min": 0,
-      "center": 0,
-      "max": 2047
+      "rotary": false,
+      "rotary_stops": 3,
+      "min": 1000,
+      "center": 1500,
+      "max": 2000
     },
     {
+      "name": "",
       "src": "const",
       "idx": 0,
       "inv": false,
       "toggle": false,
-      "min": 0,
-      "center": 0,
-      "max": 2047
+      "rotary": false,
+      "rotary_stops": 3,
+      "min": 1000,
+      "center": 1500,
+      "max": 2000
     },
     {
+      "name": "",
       "src": "const",
       "idx": 0,
       "inv": false,
       "toggle": false,
-      "min": 0,
-      "center": 0,
-      "max": 2047
+      "rotary": false,
+      "rotary_stops": 3,
+      "min": 1000,
+      "center": 1500,
+      "max": 2000
     },
     {
+      "name": "",
       "src": "const",
       "idx": 0,
       "inv": false,
       "toggle": false,
-      "min": 0,
-      "center": 0,
-      "max": 2047
+      "rotary": false,
+      "rotary_stops": 3,
+      "min": 1000,
+      "center": 1500,
+      "max": 2000
+    },
+    {
+      "name": "",
+      "src": "const",
+      "idx": 0,
+      "inv": false,
+      "toggle": false,
+      "rotary": false,
+      "rotary_stops": 3,
+      "min": 1000,
+      "center": 1500,
+      "max": 2000
+    },
+    {
+      "name": "",
+      "src": "const",
+      "idx": 0,
+      "inv": false,
+      "toggle": false,
+      "rotary": false,
+      "rotary_stops": 3,
+      "min": 1000,
+      "center": 1500,
+      "max": 2000
+    },
+    {
+      "name": "",
+      "src": "const",
+      "idx": 0,
+      "inv": false,
+      "toggle": false,
+      "rotary": false,
+      "rotary_stops": 3,
+      "min": 1000,
+      "center": 1500,
+      "max": 2000
     }
-  ],
-  "joystick_index": 0
+  ]
 }
