@@ -46,6 +46,8 @@ Simple Python feeder that reads a joystick and streams 16 channels to the board.
 - Allows configuring channels as axes or buttons with toggle/rotary options.
 - Prints link stats if TX module reports them over serial.
 
+<img width="1402" height="932" alt="image" src="https://github.com/user-attachments/assets/b8a4ee37-5fc0-4a0b-8187-bf593146136b" />
+
 ## Host Protocols
 
 Two simple input formats are supported over USB CDC (`Serial`):
