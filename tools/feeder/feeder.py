@@ -327,29 +327,94 @@ class ChannelRow(QtWidgets.QWidget):
         layout.addWidget(self.rotaryStopsBox, 1,14)
 
         self.nameBox.textChanged.connect(self.changed.emit)
+        self.src.currentIndexChanged.connect(self._update_visual_state)
+        self.rotaryBox.toggled.connect(self._update_visual_state)
+        self.toggleBox.toggled.connect(self._on_toggle_changed)
+        self.rotaryBox.toggled.connect(self._on_rotary_changed)
 
-        for w in [self.src,self.idxBox,self.inv,self.minBox,self.midBox,self.maxBox,self.toggleBox,self.rotaryBox,self.rotaryStopsBox]:
+        for w in [self.src,self.idxBox,self.inv,self.minBox,self.midBox,self.maxBox]:
             if isinstance(w, QtWidgets.QAbstractButton):
-                w.toggled.connect(self._on_mode_changed)
+                w.toggled.connect(self.changed.emit)
             else:
                 w.currentIndexChanged.connect(self.changed.emit) if isinstance(w, QtWidgets.QComboBox) else w.valueChanged.connect(self.changed.emit)
 
+        for w in [self.rotaryStopsBox]:
+            w.valueChanged.connect(self.changed.emit)
+
         self.mapBtn.clicked.connect(self._on_map)
+
+        # Initial visual state
+        self._update_visual_state()
 
     def _on_map(self):
         self.mapRequested.emit(self)
 
-    def _on_mode_changed(self):
-        """Handle toggle/rotary mode changes - ensure only one is selected"""
+    def _update_visual_state(self):
+        """Gray out the row if not mapped (src is const), enable if mapped"""
+        is_mapped = self.src.currentText() != "const"
+        src = self.src.currentText()
+        is_axis = src == "axis"
+
+        # List of widgets to enable/disable (Map button excluded - always enabled)
+        widgets_to_control = [
+            self.lbl, self.nameBox, self.bar, self.val,
+            self.idxBox, self.inv, self.minBox, self.midBox, self.maxBox
+        ]
+
+        for widget in widgets_to_control:
+            widget.setEnabled(is_mapped)
+            if not is_mapped:
+                widget.setStyleSheet("color: gray;")
+            else:
+                widget.setStyleSheet("")
+
+        # Toggle and rotary only enabled for button source
+        self.toggleBox.setEnabled(is_mapped and not is_axis)
+        self.rotaryBox.setEnabled(is_mapped and not is_axis)
+        if is_axis:
+            self.toggleBox.setStyleSheet("color: gray;")
+            self.rotaryBox.setStyleSheet("color: gray;")
+        else:
+            self.toggleBox.setStyleSheet("")
+            self.rotaryBox.setStyleSheet("")
+
+        # Inv button disabled if rotary is selected
+        is_rotary = self.rotaryBox.isChecked()
+        self.inv.setEnabled(is_mapped and not is_rotary)
+        if is_rotary:
+            self.inv.setStyleSheet("color: gray;")
+        else:
+            self.inv.setStyleSheet("")
+
+        # Rotary stops only enabled if rotary is checked
+        self.rotaryStopsBox.setEnabled(is_mapped and self.rotaryBox.isChecked())
+
+        # Map button is always enabled so you can map unmapped channels
+        self.mapBtn.setEnabled(True)
+        self.mapBtn.setStyleSheet("")
+
+        # Set default output value based on mapped state
+        if not is_mapped:
+            # Unmapped: use 1500 for first 4 channels, 1000 for others
+            default_val = 1500 if self.idx < 4 else 1000
+            self.bar.setValue(default_val)
+            self.val.setText(str(default_val))
+
+    def _on_toggle_changed(self):
+        """Handle toggle checkbox - uncheck rotary if toggle is checked"""
         if self.toggleBox.isChecked() and self.rotaryBox.isChecked():
-            # Only one can be checked - keep the one that was just checked
-            # Since we can't easily determine which was just clicked, uncheck rotary if toggle is checked
             self.rotaryBox.blockSignals(True)
             self.rotaryBox.setChecked(False)
             self.rotaryBox.blockSignals(False)
+            self._update_visual_state()
+        self.changed.emit()
 
-        # Enable/disable rotary stops based on rotary checkbox
-        self.rotaryStopsBox.setEnabled(self.rotaryBox.isChecked())
+    def _on_rotary_changed(self):
+        """Handle rotary checkbox - uncheck toggle if rotary is checked"""
+        if self.rotaryBox.isChecked() and self.toggleBox.isChecked():
+            self.toggleBox.blockSignals(True)
+            self.toggleBox.setChecked(False)
+            self.toggleBox.blockSignals(False)
         self.changed.emit()
 
     def compute(self, axes, btns):
@@ -405,7 +470,8 @@ class ChannelRow(QtWidgets.QWidget):
                 out = mx if (eff ^ inv) else mn
             self._btn_last = v
         else:
-            out = ct
+            # src == "const": unmapped channel
+            out = ct if self.idx < 4 else mn
         self.bar.setValue(out)
         self.val.setText(str(out))
         return out
