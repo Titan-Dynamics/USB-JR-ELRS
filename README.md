@@ -46,7 +46,7 @@ Simple Python feeder that reads a joystick and streams 16 channels to the board.
 - Allows configuring channels as axes or buttons with toggle/rotary options.
 - Prints link stats if TX module reports them over serial.
 
-<img width="1402" height="932" alt="image" src="https://github.com/user-attachments/assets/b8a4ee37-5fc0-4a0b-8187-bf593146136b" />
+<img width="1402" height="932" alt="image" src="https://github.com/user-attachments/assets/7e17c2f9-4a30-47bb-9f2b-bd8c71a9aa49" />
 
 Making it an exe is done with the command:
 `pyinstaller --onefile --windowed --icon="C:\Users\X\Documents\GitHub\USB-JR-ELRS\tools\feeder\icon.ico" --name="USB JR Bay" feeder.py`
